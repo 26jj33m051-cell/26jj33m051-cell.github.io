@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PIXEL FOOTBALL — Arcade</title>
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:20px;background:radial-gradient(ellipse at top,#183b49,#071521 70%);color:#f4fff9;font-family:system-ui,sans-serif;display:grid;place-items:center}.wrap{width:min(100%,980px)}header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}h1{margin:0;color:#8effc2;letter-spacing:3px;text-shadow:0 0 18px #35ff9b;font-size:clamp(25px,5vw,42px)}.sub{color:#9bbdb0;font-size:12px;letter-spacing:2px}.hud{display:flex;gap:8px}.stat{background:#102b30;border:1px solid #31604f;border-radius:12px;padding:8px 14px;text-align:center;min-width:82px}.stat small{display:block;color:#9bbdb0;font-size:10px}.stat b{font-size:22px}.field{position:relative;border:3px solid #b8f4c7;border-radius:16px;overflow:hidden;box-shadow:0 0 35px #30ff9b22;background:#247c49}canvas{display:block;width:100%;height:auto;touch-action:none}.overlay{position:absolute;inset:0;background:#06150dcc;display:grid;place-items:center;text-align:center;padding:20px}.panel{max-width:440px}.panel h2{font-size:clamp(28px,5vw,44px);margin:0 0 8px;color:#9effc7}.panel p{line-height:1.6;color:#d4e9dd}.btn{background:linear-gradient(100deg,#80ffb3,#baff6b);border:0;border-radius:30px;padding:13px 28px;font-size:16px;font-weight:900;cursor:pointer;color:#09251b}.help{color:#9bbdb0;font-size:12px;margin-top:14px}.footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:#a6c7b5;font-size:12px;margin:12px 4px}.mobile{display:none;justify-content:space-between;gap:12px;margin-top:12px}.mobile button{background:#163b34;color:white;border:1px solid #65a987;border-radius:12px;padding:12px 18px;font-size:20px;touch-action:none}@media(max-width:650px){.mobile{display:flex}.mobile .move{display:flex;gap:8px}.mobile button{min-width:54px}}
+</style>
+</head>
+<body><main class="wrap">
+<header><div><h1>PIXEL FOOTBALL</h1><div class="sub">ARCADE CUP • SCORE THE GOAL!</div></div><div class="hud"><div class="stat"><small>GOALS</small><b id="goals">0</b></div><div class="stat"><small>TIME</small><b id="time">60</b></div><div class="stat"><small>BEST</small><b id="best">0</b></div></div></header>
+<div class="field"><canvas id="game" width="900" height="560"></canvas><div class="overlay" id="overlay"><div class="panel"><h2 id="title">KICK OFF!</h2><p id="desc">상대 수비수를 피해서 골대에 슛하세요!<br>공을 몰고 가까이 가서 SPACE 또는 클릭으로 슛!</p><button class="btn" id="start">경기 시작</button><div class="help">이동: WASD / 방향키 · 슛: SPACE / 클릭</div></div></div></div>
+<div class="mobile"><div class="move"><button data-key="ArrowLeft">◀</button><button data-key="ArrowUp">▲</button><button data-key="ArrowDown">▼</button><button data-key="ArrowRight">▶</button></div><button id="shoot">⚽ 슛!</button></div>
+<div class="footer"><span>초록색 선수: 나 · 빨간색 선수: 수비수</span><span>60초 안에 최대한 많은 골을 넣으세요!</span></div>
+</main>
+<script>
+(()=>{
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d'),overlay=document.getElementById('overlay');
+const goalsEl=document.getElementById('goals'),timeEl=document.getElementById('time'),bestEl=document.getElementById('best');
+let best=Number(localStorage.getItem('pixelFootballBest')||0),goals=0,time=60,active=false,last=0,keys={},shotCooldown=0,flash=0;
+const player={x:450,y:430,r:16,vx:0,vy:0},ball={x:450,y:395,vx:0,vy:0,r:9},defenders=[{x:340,y:235,r:17},{x:560,y:235,r:17},{x:450,y:160,r:17}];
+bestEl.textContent=best;
+function field(){ctx.fillStyle='#237847';ctx.fillRect(0,0,900,560);for(let i=0;i<9;i++){ctx.fillStyle=i%2?'#27834d':'#247a47';ctx.fillRect(i*100,0,100,560)}ctx.strokeStyle='#d7f8df';ctx.lineWidth=4;ctx.strokeRect(28,22,844,516);ctx.beginPath();ctx.moveTo(28,280);ctx.lineTo(872,280);ctx.stroke();ctx.beginPath();ctx.arc(450,280,75,0,Math.PI*2);ctx.stroke();ctx.strokeRect(315,22,270,95);ctx.strokeRect(375,22,150,48);ctx.fillStyle='#d7f8df';ctx.fillRect(385,3,130,20);ctx.fillStyle='#152b25';ctx.fillRect(390,7,120,12);ctx.fillStyle='#fff';ctx.fillRect(444,92,12,4)}
+function circle(x,y,r,color,outline='#102b20'){ctx.fillStyle=color;ctx.strokeStyle=outline;ctx.lineWidth=3;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.stroke()}
+function draw(){field();defenders.forEach(d=>{circle(d.x,d.y,d.r,'#f05b58','#711f2b');ctx.fillStyle='white';ctx.fillRect(d.x-7,d.y-5,4,4);ctx.fillRect(d.x+3,d.y-5,4,4)});circle(player.x,player.y,player.r,'#75ffac','#e4fff0');ctx.fillStyle='#073d2c';ctx.fillRect(player.x-5,player.y-5,3,3);ctx.fillRect(player.x+3,player.y-5,3,3);circle(ball.x,ball.y,ball.r,'#fff','#263c32');ctx.strokeStyle='#263c32';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(ball.x-5,ball.y);ctx.lineTo(ball.x+5,ball.y);ctx.moveTo(ball.x,ball.y-5);ctx.lineTo(ball.x,ball.y+5);ctx.stroke();if(flash>0){ctx.fillStyle='#d9ffb8';ctx.font='bold 46px system-ui';ctx.textAlign='center';ctx.fillText('GOAL!',450,300)}}
+function resetPositions(){player.x=450;player.y=430;ball.x=450;ball.y=395;ball.vx=ball.vy=0;defenders[0].x=340;defenders[1].x=560;defenders[2].x=450;defenders.forEach((d,i)=>d.y=235+i*8)}
+function shoot(){if(!active||shotCooldown>0)return;let dx=450-ball.x,dy=0,dist=Math.hypot(dx,dy)||1;let towardGoal=Math.atan2(-Math.max(140,ball.y),dx*.08);ball.vx=Math.sin(towardGoal)*90;ball.vy=-560;shotCooldown=.45}
+function start(){goals=0;time=60;flash=0;shotCooldown=0;resetPositions();goalsEl.textContent=goals;timeEl.textContent=time;overlay.style.display='none';active=true;last=performance.now();requestAnimationFrame(loop)}
+function finish(){active=false;overlay.style.display='grid';document.getElementById('title').textContent='FULL TIME!';document.getElementById('desc').innerHTML='득점: <b>'+goals+'</b>골<br>'+(goals>=best?'최고 기록 갱신!':'다시 도전해 보세요!');document.getElementById('start').textContent='다시 경기하기'}
+function update(dt){time=Math.max(0,time-dt);timeEl.textContent=Math.ceil(time);shotCooldown=Math.max(0,shotCooldown-dt);flash=Math.max(0,flash-dt);let ax=(keys.ArrowRight||keys.d?1:0)-(keys.ArrowLeft||keys.a?1:0),ay=(keys.ArrowDown||keys.s?1:0)-(keys.ArrowUp||keys.w?1:0);let len=Math.hypot(ax,ay)||1;player.vx=ax/len*245;player.vy=ay/len*245;player.x=Math.max(48,Math.min(852,player.x+player.vx*dt));player.y=Math.max(140,Math.min(510,player.y+player.vy*dt));
+let dx=ball.x-player.x,dy=ball.y-player.y,dist=Math.hypot(dx,dy);if(dist<player.r+ball.r+5&&Math.hypot(ball.vx,ball.vy)<160){ball.x=player.x+dx/(dist||1)*27;ball.y=player.y+dy/(dist||1)*27;ball.vx=player.vx*.8;ball.vy=player.vy*.8}
+defenders.forEach((d,i)=>{let tx=ball.x,ty=ball.y,dd=Math.hypot(tx-d.x,ty-d.y)||1;d.x+=(tx-d.x)/dd*(65+i*10)*dt;d.y+=(ty-d.y)/dd*(65+i*10)*dt;d.x=Math.max(65,Math.min(835,d.x));d.y=Math.max(145,Math.min(265,d.y));let pd=Math.hypot(ball.x-d.x,ball.y-d.y);if(pd<d.r+ball.r){ball.vx+=(ball.x-d.x)/(pd||1)*150;ball.vy+=(ball.y-d.y)/(pd||1)*150}});
+ball.x+=ball.vx*dt;ball.y+=ball.vy*dt;ball.vx*=Math.pow(.985,dt*60);ball.vy*=Math.pow(.985,dt*60);if(ball.x<40||ball.x>860)ball.vx*=-.7;if(ball.y>530){ball.y=530;ball.vy*=-.5}
+if(ball.y<25&&ball.x>385&&ball.x<515){goals++;goalsEl.textContent=goals;flash=.8;resetPositions()}
+else if(ball.y<30){ball.y=30;ball.vy=Math.abs(ball.vy)*.65}
+if(time<=0){if(goals>best){best=goals;localStorage.setItem('pixelFootballBest',best);bestEl.textContent=best}finish()}}
+function loop(t){if(!active)return;let dt=Math.min((t-last)/1000,.035);last=t;update(dt);draw();if(active)requestAnimationFrame(loop)}
+document.getElementById('start').addEventListener('click',start);document.addEventListener('keydown',e=>{let k=e.key.length===1?e.key.toLowerCase():e.key;if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();keys[k]=true;if(e.code==='Space'){e.preventDefault();shoot()}if(e.key==='Enter'&&!active)start()});document.addEventListener('keyup',e=>{let k=e.key.length===1?e.key.toLowerCase():e.key;keys[k]=false});document.getElementById('shoot').addEventListener('pointerdown',shoot);canvas.addEventListener('pointerdown',shoot);
+document.querySelectorAll('[data-key]').forEach(b=>{let k=b.dataset.key;b.addEventListener('pointerdown',e=>{e.preventDefault();keys[k]=true});['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,()=>keys[k]=false))});
+draw();
+})();
+</script></body></html>
