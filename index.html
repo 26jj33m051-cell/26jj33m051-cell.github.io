@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#101827"><title>PIXEL RUSH — 미니 레이싱</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+KR:wght@500;700;900&display=swap');
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% 0,#263b52,#101827 65%);color:#f5f7fa;font-family:'Noto Sans KR',sans-serif;min-height:100vh;display:flex;justify-content:center;align-items:center;padding:18px}
+.wrap{width:min(100%,560px)}header{text-align:center;margin-bottom:14px}.logo{font:clamp(20px,5vw,30px) 'Press Start 2P',monospace;color:#ffe36e;text-shadow:4px 4px #b64b52;letter-spacing:-2px}.sub{color:#9eb2c7;font-size:12px;letter-spacing:3px;margin-top:10px}
+.panel{background:#172638;border:3px solid #47617b;box-shadow:0 8px 0 #0a111c;border-radius:12px;padding:12px}.hud{display:flex;justify-content:space-between;gap:8px;margin-bottom:9px}.stat{background:#0c1724;border:2px solid #334b64;border-radius:7px;padding:8px 10px;flex:1;text-align:center}.stat small{display:block;color:#91a8be;font-size:10px}.stat strong{font:16px 'Press Start 2P',monospace;color:#ffe36e;display:block;margin-top:7px}
+.stage{position:relative;border:4px solid #71869a;border-radius:7px;overflow:hidden;background:#243344}canvas{display:block;width:100%;height:auto;image-rendering:pixelated;touch-action:none}
+.overlay{position:absolute;inset:0;background:#07111ddd;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px}.overlay.hidden{display:none}.modal{max-width:340px}.modal h2{font:18px 'Press Start 2P',monospace;color:#ffe36e;line-height:1.7}.modal p{font-size:13px;line-height:1.8;color:#c3d1df}
+button{border:0;border-radius:7px;padding:13px 18px;font-weight:900;cursor:pointer;color:#152033;background:#ffe36e;box-shadow:0 4px 0 #c28b39;font-size:14px}button:active{transform:translateY(3px);box-shadow:0 1px 0 #c28b39}.controls{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px}.steer{display:flex;gap:10px}.steer button{width:64px;height:52px;font-size:22px;padding:0;background:#c5e6f7;box-shadow:0 4px #719cb5}.hint{font-size:11px;color:#9eb2c7;text-align:center;line-height:1.7}.bottom{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}.card{background:#0e1b2a;border:2px solid #334b64;border-radius:8px;padding:12px}.card h3{font-size:12px;color:#ffe36e;margin:0 0 9px}.rank{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px dashed #344b61;color:#d7e2ed}.rank:last-child{border:0}.muted{color:#8ca2b8}
+@media(min-width:600px){.controls{margin-top:14px}} 
+</style></head>
+<body><main class="wrap">
+<header><div class="logo">PIXEL RUSH</div><div class="sub">8-BIT HIGHWAY CHALLENGE</div></header>
+<section class="panel">
+<div class="hud"><div class="stat"><small>SCORE</small><strong id="score">00000</strong></div><div class="stat"><small>BEST</small><strong id="best">00000</strong></div><div class="stat"><small>SPEED</small><strong id="speed">1.0x</strong></div></div>
+<div class="stage"><canvas id="game" width="480" height="640" aria-label="픽셀 레이싱 게임"></canvas>
+<div class="overlay" id="overlay"><div class="modal"><h2 id="headline">READY?</h2><p id="message">차선을 바꾸며 차량을 피하세요.<br>오래 달릴수록 속도가 빨라집니다!</p><button id="start">레이스 시작 ▶</button></div></div></div>
+<div class="controls"><div class="steer"><button id="left" aria-label="왼쪽">◀</button><button id="right" aria-label="오른쪽">▶</button></div><div class="hint">키보드 ← → 또는 A / D<br>모바일은 버튼 또는 화면 좌우 터치</div><button id="pause" style="background:#9fc7e8;box-shadow:0 4px #5b829f">Ⅱ</button></div>
+</section>
+<div class="bottom"><section class="card"><h3>🏆 LOCAL TOP 5</h3><div id="ranking"></div></section><section class="card"><h3>🎮 HOW TO PLAY</h3><div class="hint" style="text-align:left">• 다른 차와 충돌하면 게임 종료<br>• 지나친 차량마다 점수 획득<br>• 최고 기록은 이 기기에 저장돼요<br>• 다시 도전해 TOP 5에 올라보세요!</div></section></div>
+</main>
+<script>
+(()=>{
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d'),W=480,H=640;
+const $=id=>document.getElementById(id);let running=false,paused=false,frame=0,score=0,speed=3.2,roadOffset=0,last=0,player={lane:1,x:0,y:520,w:42,h:68},traffic=[],keys={};
+const lanes=[150,240,330],colors=['#f05252','#f4b942','#51c7b7','#a88bf2','#e7edf5'];
+let best=Number(localStorage.getItem('pixelRushBest')||0);
+$('best').textContent=String(best).padStart(5,'0');
+function ranks(){try{return JSON.parse(localStorage.getItem('pixelRushRanks')||'[]')}catch{return[]}}
+function saveRank(s){if(!s)return;let r=ranks();r.push({s,at:new Date().toLocaleDateString('ko-KR')});r.sort((a,b)=>b.s-a.s);r=r.slice(0,5);localStorage.setItem('pixelRushRanks',JSON.stringify(r));renderRanks()}
+function renderRanks(){let r=ranks();$('ranking').innerHTML=r.length?r.map((v,i)=>'<div class="rank"><span>'+(i+1)+'. '+v.at+'</span><b>'+v.s+'</b></div>').join(''):'<div class="hint">아직 기록이 없어요!</div>'}
+function rect(x,y,w,h,c){ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),w,h)}
+function car(x,y,color,playerCar=false){ctx.save();ctx.translate(Math.round(x),Math.round(y));
+rect(7,0,28,8,'#101722');rect(3,8,36,48,color);rect(0,18,5,17,'#111923');rect(37,18,5,17,'#111923');rect(8,13,26,13,playerCar?'#bcecff':'#a9c8d8');rect(9,31,24,15,playerCar?'#f8fbff':'#293a4b');rect(7,50,8,7,'#ffe6a1');rect(27,50,8,7,'#ffe6a1');rect(8,5,8,4,'#fff');rect(26,5,8,4,'#fff');if(playerCar){rect(18,17,6,28,'#fff2a6');rect(13,56,16,5,'#ffe36e')}ctx.restore()}
+function drawRoad(){rect(0,0,W,H,'#28604b');rect(70,0,340,H,'#454d5b');rect(78,0,324,H,'#555d6a');rect(70,0,8,H,'#f2e9d5');rect(402,0,8,H,'#f2e9d5');
+for(let y=-40;y<H;y+=80){let yy=(y+roadOffset)%80;rect(185,yy,8,42,'#dce1dc');rect(287,yy,8,42,'#dce1dc')}
+for(let y=-50;y<H;y+=100){let yy=(y+roadOffset*1.3)%100;rect(35,yy,12,30,'#3e8b60');rect(430,yy+20,15,28,'#3e8b60');rect(30,yy+5,22,12,'#52a86d');rect(425,yy+25,24,12,'#52a86d')}}
+function draw(){ctx.clearRect(0,0,W,H);drawRoad();traffic.forEach(t=>car(t.x-21,t.y,t.color));car(lanes[player.lane]-21,player.y,'#47b9ff',true);
+ctx.fillStyle='#ffffff';ctx.font='bold 12px monospace';ctx.fillText('KM/H '+Math.floor(speed*48),12,22)}
+function spawn(){let lane=Math.floor(Math.random()*3);if(traffic.some(t=>t.lane===lane&&t.y<150))return;traffic.push({lane,x:lanes[lane],y:-80,color:colors[Math.floor(Math.random()*colors.length)],passed:false})}
+function hud(){$('score').textContent=String(score).padStart(5,'0');$('speed').textContent=(speed/3.2).toFixed(1)+'x'}
+function end(){running=false;best=Math.max(best,score);localStorage.setItem('pixelRushBest',best);$('best').textContent=String(best).padStart(5,'0');saveRank(score);$('headline').textContent='CRASH!';$('message').innerHTML='이번 점수 <b style="color:#ffe36e">'+score+'</b><br>최고 기록 '+best+'점 — 다시 도전할까요?';$('start').textContent='다시 레이스 ▶';$('overlay').classList.remove('hidden');draw()}
+function move(d){if(!running||paused)return;player.lane=Math.max(0,Math.min(2,player.lane+d))}
+function update(){frame++;speed=Math.min(8.8,3.2+score/260);roadOffset=(roadOffset+speed)%80;if(frame%Math.max(24,Math.floor(64-speed*4))===0)spawn();
+traffic.forEach(t=>{t.y+=speed+(score/700);if(!t.passed&&t.y>player.y+65){t.passed=true;score+=10}if(t.lane===player.lane&&t.y+55>player.y+7&&t.y<player.y+62){end()}});traffic=traffic.filter(t=>t.y<H+90);if(frame%12===0)score+=1;hud()}
+function loop(ts){if(!running)return;if(!last)last=ts;let dt=Math.min(32,ts-last);last=ts;if(!paused){acc+=dt;while(acc>16){update();acc-=16}draw()}requestAnimationFrame(loop)}
+let acc=0;
+function start(){score=0;frame=0;speed=3.2;traffic=[];player.lane=1;running=true;paused=false;last=0;acc=0;$('overlay').classList.add('hidden');$('pause').textContent='Ⅱ';hud();requestAnimationFrame(loop)}
+$('start').addEventListener('click',start);$('left').addEventListener('click',()=>move(-1));$('right').addEventListener('click',()=>move(1));
+$('pause').addEventListener('click',()=>{if(!running)return;paused=!paused;$('pause').textContent=paused?'▶':'Ⅱ';if(!paused){last=0;requestAnimationFrame(loop)}});
+window.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight',' ','a','d','A','D'].includes(e.key))e.preventDefault();if(e.key==='ArrowLeft'||e.key.toLowerCase()==='a')move(-1);if(e.key==='ArrowRight'||e.key.toLowerCase()==='d')move(1);if(e.key===' '&& !running)start()});
+canvas.addEventListener('pointerdown',e=>{const r=canvas.getBoundingClientRect(),x=e.clientX-r.left;if(x<r.width/2)move(-1);else move(1)});
+renderRanks();draw();
+})();
+</script></body></html>
